@@ -1,0 +1,43 @@
+name: Publish scheduled stories
+
+on:
+  schedule:
+    # Every 15 minutes. GitHub cron is UTC and may run up to ~15 min late
+    # under load — schedule posts with that buffer in mind.
+    - cron: "*/15 * * * *"
+  workflow_dispatch: {}
+
+concurrency:
+  group: publish-stories
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install deps
+        run: pip install -r scripts/requirements.txt
+
+      - name: Publish due stories
+        id: publish
+        env:
+          META_ACCESS_TOKEN: ${{ secrets.META_ACCESS_TOKEN }}
+        run: python scripts/publish_stories.py
+
+      - name: Commit updated schedules
+        if: steps.publish.outputs.changed == 'true'
+        run: |
+          git config user.name "doka-story-bot"
+          git config user.email "doka-story-bot@users.noreply.github.com"
+          git add schedules/
+          git commit -m "chore: update schedule statuses [skip ci]"
+          git push
